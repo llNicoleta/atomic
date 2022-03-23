@@ -95,15 +95,9 @@ Token *addToken(int code) {
 }
 
 char* extract(const char* start, const char* end) {
-    unsigned int length = end - start;
+    unsigned int length = end - start + 1;
     char* result = (char*) malloc((length) * sizeof(char));
-    int index = 0;
-
-    while(index < length) {
-        result[index] = start[index];
-        index++;
-    }
-    result[length] = '\0';
+    snprintf(result, length, "%s", start);
     return result;
 }
 
@@ -156,7 +150,6 @@ char* getTokenCode(int code) {
 int getNextToken() {
     int currentState = 0;
     const char* start;
-    char prevChar;
     for (;;) {
         // Debugging
         // printf("#%d\t%c(%d)\n", currentState, *pch, *pch);
@@ -174,7 +167,7 @@ int getNextToken() {
             } else if (*pch == '"') {
                 currentState = 14, start = pch++;
             } else if (*pch == ',') {
-                currentState = 16, pch++;
+                currentState = 16, start = pch++;
             } else if (*pch == ';') {
                 currentState = 17, pch++;
             } else if (*pch == '(') {
@@ -292,7 +285,6 @@ int getNextToken() {
             return CT_REAL;
             case 11:
             if (*pch != '\'') {
-                prevChar = pch[0];
                 currentState = 12, pch++;
             }
             break;
@@ -303,7 +295,7 @@ int getNextToken() {
             break;
             case 13:
             token = addToken(CT_CHAR);
-            token->i = prevChar;
+            token->i = start[1];
             return CT_CHAR;
             case 14:
             if (*pch != '"') {
@@ -343,7 +335,6 @@ int getNextToken() {
             addToken(RACC);
             return RACC;
             case 24:
-            line++;
             addToken(END);
             return END;
             case 25:
