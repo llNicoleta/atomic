@@ -343,6 +343,7 @@ int getNextToken() {
             addToken(RACC);
             return RACC;
             case 24:
+            line++;
             addToken(END);
             return END;
             case 25:
@@ -449,14 +450,14 @@ int getNextToken() {
 
 void printToken() {
     Token* currentToken = tokens;
-    while(currentToken->next != NULL) {
-        printf("%d\t%s\t", currentToken->line, getTokenCode(currentToken->code));
+    while(currentToken != NULL) {
+        printf("%d\t%s", currentToken->line, getTokenCode(currentToken->code));
         switch(currentToken->code) {
-            case ID: printf("\t%s", currentToken->text); break;
-            case CT_INT: printf("\t%d", currentToken->i); break;
-            case CT_REAL: printf("\t%g", currentToken->r); break;
-            case CT_CHAR: printf("\t%c", currentToken->i); break;
-            case CT_STRING: printf("\t%s", currentToken->text); break;
+            case ID: printf(":%s", currentToken->text); break;
+            case CT_INT: printf(":%d", currentToken->i); break;
+            case CT_REAL: printf(":%g", currentToken->r); break;
+            case CT_CHAR: printf(":%c", currentToken->i); break;
+            case CT_STRING: printf(":%s", currentToken->text); break;
         }
         currentToken = currentToken->next;
         printf("\n");
