@@ -78,7 +78,6 @@ void err(const char *fmt,...) {
     exit(-1);
 }
 
-
 Token *addToken(int code) {
     Token *tk;
     SAFEALLOC(tk, Token)
@@ -151,8 +150,6 @@ int getNextToken() {
     int currentState = 0;
     const char* start;
     for (;;) {
-        // Debugging
-        // printf("#%d\t%c(%d)\n", currentState, *pch, *pch);
         switch (currentState) {
             case 0:
             if (isalpha(*pch) || *pch == '_') {
@@ -217,7 +214,6 @@ int getNextToken() {
             break;
             case 2:
             token = addToken(ID);
-            token->text = malloc((pch - start) * sizeof(char));
             token->text = extract(start, pch);
             if (!strcmp(token->text, "break")) token->code = BREAK;
             if (!strcmp(token->text, "char")) token->code = CHAR;
@@ -230,7 +226,7 @@ int getNextToken() {
             if (!strcmp(token->text, "struct")) token->code = STRUCT;
             if (!strcmp(token->text, "void")) token->code = VOID;
             if (!strcmp(token->text, "while")) token->code = WHILE;
-            return ID;
+            return token->code;
             case 3:
             if (isdigit(*pch)) {
                 pch++;
@@ -306,7 +302,6 @@ int getNextToken() {
             break;
             case 15:
             token = addToken(CT_STRING);
-            token->text = malloc(((pch - start + 1)) * sizeof(char));
             token->text = extract(start + 1, pch - 1);
             return CT_STRING;
             break;
