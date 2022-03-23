@@ -95,7 +95,7 @@ Token *addToken(int code) {
 
 char* extract(const char* start, const char* end) {
     unsigned int length = end - start + 1;
-    char* result = (char*) malloc((length) * sizeof(char));
+    char* result = (char*) malloc(length * sizeof(char));
     snprintf(result, length, "%s", start);
     return result;
 }
