@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <string.h>
+#include <stdbool.h>
 
 #define NMAX 30000
 #define SAFEALLOC(var, Type) if((var = (Type*)malloc(sizeof(Type))) == NULL) err("notenough memory");
@@ -17,6 +18,28 @@ typedef struct _Token {
     int line; // linia din fisierul de intrare
     struct _Token *next;
 } Token;
+
+bool unit();
+bool structDef();
+bool varDef();
+bool typeBase();
+bool arrayDecl();
+bool fnDef();
+bool fnParam();
+bool stm();
+bool stmCompound();
+bool expr();
+bool exprAssign();
+bool exprOr();
+bool exprAnd();
+bool exprEq();
+bool exprRel();
+bool exprAdd();
+bool exprMul();
+bool exprCast();
+bool exprUnary();
+bool exprPostfix();
+bool exprPrimary();
 
 enum {
     ID,
@@ -64,9 +87,13 @@ enum {
 Token* tokens;
 Token* token;
 Token* lastToken;
+
 int line = 1;
 char inbuff[NMAX + 1];
 char* pch; // points to the current character
+
+Token* iterToken;
+Token* consumed; // last atom that's been consumed
 
 void err(const char *fmt,...) {
     va_list va;
@@ -77,6 +104,18 @@ void err(const char *fmt,...) {
     va_end(va);
     exit(-1);
 }
+
+void tkerr(const Token *tk,const char *fmt,...) {
+    va_list va;
+    va_start(va,fmt);
+    fprintf(stderr,"error in line %d: ",tk->line);
+    vfprintf(stderr,fmt,va);
+    fputc('\n',stderr);
+    va_end(va);
+    exit(-1);
+}
+
+/* _________ LEX _________ */
 
 Token *addToken(int code) {
     Token *tk;
@@ -450,6 +489,498 @@ void printToken() {
     }
 }
 
+/* _________ SINTAX _________ */
+
+bool consume(int code) {
+    printf("consume(%s)", getTokenCode(code));
+    if (iterToken->code == code) {
+        consumed = iterToken;
+        iterToken = iterToken->next;
+        printf("=> consumed\n");
+        return true;
+    }
+    printf(" => found %s\n",getTokenCode(iterToken->code));
+    return false;
+}
+
+bool unit() {
+    printf("#unit() -> %s\n", getTokenCode(iterToken->code));
+    for (;;) {
+        if (structDef()) {}
+        else if (fnDef()) {}
+        else if (varDef()) {}
+        else break;
+    }
+    if (consume(END)) {
+        return true;
+    } else {
+        // error
+    }
+}
+
+bool structDef() {
+    printf("#structDef() -> %s\n", getTokenCode(iterToken->code));
+    Token *start = iterToken;
+    if (consume(STRUCT)) {
+        if (consume(ID)) {
+            if (consume(LACC)) {
+                while (varDef()) {}
+                if (consume(RACC)) {
+                    if (consume(SEMICOLON)) {
+                        return true;
+                    } else tkerr(iterToken, "Missing ; after }");
+                } else tkerr(iterToken, "Missing } after {");
+            }
+        } else tkerr(iterToken, "Missing variable name after struct");
+    }
+    iterToken = start;
+    return false;
+}
+
+bool varDef() {
+    printf("#varDef() -> %s\n", getTokenCode(iterToken->code));
+    Token *start = iterToken;
+    if (typeBase()) {
+        if (consume(ID)) {
+            if (arrayDecl()) {}
+            if (consume(SEMICOLON))
+                return true;
+        } else tkerr(iterToken, "Missing variable name");
+    }
+    iterToken = start;
+    return false;
+}
+
+bool typeBase() {
+    printf("#typeBase() -> %s\n", getTokenCode(iterToken->code));
+    Token *start = iterToken;
+    if (consume(INT)) return true;
+    if (consume(DOUBLE)) return true;
+    if (consume(CHAR)) return true;
+    if (consume(STRUCT)) 
+        if (consume(ID)) 
+            return true;
+    iterToken = start;
+    return false;
+}
+
+bool arrayDecl() {
+    printf("#arrayDecl() -> %s\n", getTokenCode(iterToken->code));
+    Token *start = iterToken;
+    if (consume(LBRACKET)) {
+        if (expr()) {}
+        if (consume(RBRACKET)) {
+            return true;
+        }
+    }
+    iterToken = start;
+    return false;
+}
+
+bool fnDef() {
+    printf("#fnDef() -> %s\n", getTokenCode(iterToken->code));
+    Token *start = iterToken;
+    if (typeBase()) {}
+    if (consume(VOID)) {}
+    if (consume(ID)) {
+        if (consume(LPAR)) {
+            if (fnParam()) {
+                while (consume(COMMA)) {
+                    if (fnParam()) {}
+                }
+            }
+            if (consume(RPAR)) {
+                if (stmCompound()) {
+                    return true;
+                }
+            }
+        }
+    }
+    iterToken = start;
+    return false;
+}
+
+bool fnParam() {
+    printf("#fnParam() -> %s\n", getTokenCode(iterToken->code));
+    Token *start = iterToken;
+    if (typeBase()) {
+        if (consume(ID)) {
+            if (arrayDecl()) {}
+            return true;
+        }
+    }
+    iterToken = start;
+    return false;
+}
+
+bool stm() {
+    printf("#stm() -> %s\n", getTokenCode(iterToken->code));
+    Token *start = iterToken;
+    if (stmCompound()) return true;
+    if (consume(IF)) {
+        if (consume(LPAR)) {
+            if (expr()) {
+                if (consume(RPAR)) {
+                    if (stm()) {
+                        if (consume(ELSE)) {
+                            if (stm()) {}
+                        }
+                        return true;
+                    }
+                }
+            }
+        }
+    } 
+    if (consume(WHILE)) {
+        if (consume(LPAR)) {
+            if (expr()) {
+                if (consume(RPAR)) {
+                    if (stm()) {
+                        return true;
+                    }
+                }
+            }
+        }
+    } 
+    if (consume(FOR)) {
+        if (consume(LPAR)) {
+            if (expr()) {}
+            if (consume(SEMICOLON)) {
+                if (expr()) {}
+                    if (consume(SEMICOLON)) {
+                        if (expr()) {}
+                        if (consume(RPAR)) {
+                            if (stm()) {
+                                return true;
+                            }
+                        }
+                    }
+            }
+        }
+    } 
+    if (consume(BREAK)) {
+        if (consume(SEMICOLON)) {
+            return true;
+        }
+    } 
+    if (consume(RETURN)) {
+        if (expr()) {}
+        if (consume(SEMICOLON)) {
+            return true;
+        }
+    }
+    if (expr()) {}
+    if (consume(SEMICOLON)) {
+        return true;
+    }
+    iterToken = start;
+    return false;
+}
+
+bool stmCompound() {
+    printf("#stmCompound() -> %s\n", getTokenCode(iterToken->code));
+    Token *start = iterToken;
+    if (consume(LACC)) {
+        for (;;) {
+            if (varDef()) {}
+            else if (stm()) {}
+            else break;
+        }
+        if (consume(RACC)) {
+            return true;
+        }
+    }
+    iterToken = start;
+    return false;
+}
+
+bool expr() {
+    printf("#expr() -> %s\n", getTokenCode(iterToken->code));
+    if (exprAssign()) {
+        return true;
+    }
+    return false;
+}
+
+bool exprAssign() {
+    printf("#exprAssign() -> %s\n", getTokenCode(iterToken->code));
+    Token *start = iterToken;
+    if (exprUnary()) {
+        if (consume(ASSIGN)) {
+            if (exprAssign()) {
+                return true;
+            }
+        }
+    } 
+    iterToken = start;
+    if (exprOr()) return true;
+    iterToken = start;
+    return false;
+}
+
+bool exprOrPrim() {
+    Token *start = iterToken;
+    if (consume(OR)) {
+        if (exprAnd()) {
+            if (exprOrPrim()) {
+                return true;
+            }
+        }
+    }
+    iterToken = start;
+    return true;
+}
+
+// exprOr
+
+bool exprOr() {
+    printf("#exprOr() -> %s\n", getTokenCode(iterToken->code));
+    if (exprAnd()) {
+        if (exprOrPrim()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool exprAndPrim() {
+    Token *start = iterToken;
+    if (consume(AND)) {
+        if (exprEq()) {
+            if (exprAndPrim()) {
+                return true;
+            }
+        }
+    }
+    iterToken = start;
+    return true;
+}
+
+bool exprAnd() {
+    printf("#exprAnd() -> %s\n", getTokenCode(iterToken->code));
+    if (exprEq()) {
+        if (exprAndPrim()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool exprEqPrim() {
+    Token *start = iterToken;
+    int id = -1;
+    if (consume(EQUAL)) { id = EQUAL; }
+    else if(consume(NOTEQ)) { id = NOTEQ; }
+
+    if (id >= 0) {
+        if (exprRel()) {
+            if (exprEqPrim()) return true;
+        }
+    }
+    iterToken = start;
+    return true;
+}
+
+bool exprEq() {
+    printf("#exprEq() -> %s\n", getTokenCode(iterToken->code));
+    if (exprRel()) {
+        if (exprEqPrim()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool exprRelPrim() {
+    Token *start = iterToken;
+    int id = -1;
+    if (consume(LESS)) { id = LESS; }
+    else if (consume(LESSEQ)) { id = LESSEQ; }
+    else if (consume(GREATER)) { id = GREATER; }
+    else if (consume(GREATEREQ)) { id = GREATEREQ; }
+
+    if (id >= 0 ) {
+        if (exprAdd()) {
+            if (exprRelPrim()) {
+                return true;
+            }
+        }
+    }
+    iterToken = start;
+    return true;
+}
+
+bool exprRel() {
+    printf("#exprRel() -> %s\n", getTokenCode(iterToken->code));
+    if (exprAdd()) {
+        if (exprRelPrim()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool exprAddPrim() {
+    Token *start = iterToken;
+    int id = -1;
+    if (consume(ADD)) { id = ADD; }
+    else if (consume(SUB)) { id = SUB; }
+    if (exprMul()) {
+        if (exprAddPrim()) {
+            return true;
+        }
+    }
+    iterToken = start;
+    return true;
+}
+
+bool exprAdd() {
+    printf("#exprAdd() -> %s\n", getTokenCode(iterToken->code));
+    if (exprMul()) {
+        if (exprAddPrim()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool exprMulPrim() {
+    Token *start = iterToken;
+    int id = -1;
+    if (consume(MUL)) { id = MUL; }
+    else if (consume(DIV)) { id = DIV; }
+    if (id >= 0) {
+        if (exprCast()) {
+            if (exprMulPrim()) {
+                return true;
+            }
+        }
+    }
+    iterToken = start;
+    return true;
+}
+
+bool exprMul() {
+    printf("#exprMul() -> %s\n", getTokenCode(iterToken->code));
+    if (exprCast()) {
+        if (exprMulPrim()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool exprCast() {
+    printf("#exprCast() -> %s\n", getTokenCode(iterToken->code));
+    Token *start = iterToken;
+    if (consume(LPAR)) {
+        if (typeBase()) {
+            if (arrayDecl()) {}
+            if (consume(RPAR)) {
+                if (exprCast()) {
+                    return true;
+                }
+            }
+        }
+    } 
+    iterToken = start;
+    if (exprUnary()) return true;
+    iterToken = start;
+    return false;
+}
+
+bool exprUnary() {
+    printf("#exprUnary() -> %s\n", getTokenCode(iterToken->code));
+    Token *start = iterToken;
+    int id = -1;
+    if (consume(SUB)) {
+        id = SUB;
+    }
+    iterToken = start;
+    if (consume(NOT)) {
+        id = NOT;
+    }
+    iterToken = start;
+    
+    if (id >= 0) {
+        if (exprUnary()) 
+            return true;
+    }
+
+    if (exprPostfix()) {
+        return true;
+    }
+    iterToken = start;
+    return false;
+}
+
+bool exprPostfixPrim() {
+    Token *start = iterToken;
+    if (consume(LBRACKET)) {
+        if (expr()) {
+            if (consume(RBRACKET)) {
+                if (exprPostfixPrim()) {
+                    return true;
+                }
+            }
+        }
+    } 
+    if (consume(DOT)) {
+        if (consume(ID)) {
+            if (exprPostfixPrim()) {
+                return true;
+            }
+        }
+    }
+    iterToken = start;
+    return true;
+}
+
+bool exprPostfix() {
+    printf("#exprPostfix() -> %s\n", getTokenCode(iterToken->code));
+    if (exprPrimary()) {
+        if (exprPostfixPrim()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool exprPrimary() {
+    printf("#exprPrimary() -> %s\n", getTokenCode(iterToken->code));
+    Token *start = iterToken;
+    if (consume(ID)) {
+        if (consume(LPAR)) {
+            if (expr()) {
+                for (;;) {
+                    if (consume(COMMA)) {
+                        if (expr()) {}
+                    } else break;
+                }
+            }
+        }
+        return true;
+    }
+    iterToken = start;
+    if (consume(CT_INT)) return true;
+    iterToken = start;
+    if (consume(CT_REAL)) return true;
+    iterToken = start;
+    if (consume(CT_CHAR)) return true;
+    iterToken = start;
+    if (consume(CT_STRING)) return true;
+    iterToken = start;
+    if (consume(LPAR)) {
+        if (expr()) {
+            if (consume(RPAR)) {
+                return true;
+            }
+        }
+    }
+    iterToken = start;
+    return false;
+}
+
 int main(int argc, char** argv) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <testFile>", argv[0]);
@@ -471,6 +1002,11 @@ int main(int argc, char** argv) {
 
     while (getNextToken() != END);
     printToken();
+
+    printf("%s\n", getTokenCode(tokens[0].code));
+
+    iterToken = tokens;
+    unit();
 
     return 0;
 }
