@@ -1,27 +1,28 @@
-struct Pt{
-	int x;
-	int y;
+int x;
+char y;
+double z;
+double p[100];
+
+struct S1{
+	int i;
+	double d[2];
+	char x;
 	};
-struct Pt points[10];
+struct S1 p1;
+struct S1 vp[10];
 
-
-double max(double a,double b){
-	if(a>b)return a;
-		else return b;
-	}
-
-int len(char s[]){
-	struct Pt point;
+double sum(double x[5],int n){
+	double r;
 	int i;
-	i=0;
-	while(s[i])i=i+1;
-	return i;
-	}
-
-void main(){
-	int i;
-	for(i=10;;i=i/2){
-		puti(i);
-		if(i||0 && 0)break;
+	r=0;
+	for(i=0;i<n;i=i+1){
+		double n;
+		n=x[i];
+		r=r+n;		
 		}
+	return r;
+	}
+	
+void f(struct S1 p){
+	puti(p.i);
 	}

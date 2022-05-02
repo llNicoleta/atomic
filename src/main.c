@@ -23,12 +23,12 @@ typedef struct _Token {
 bool unit();
 bool structDef();
 bool varDef();
-bool typeBase();
-bool arrayDecl();
+bool typeBase(Type *t);
+bool arrayDecl(Type *t);
 bool fnDef();
 bool fnParam();
 bool stm();
-bool stmCompound();
+bool stmCompound(bool newDomain);
 bool expr();
 bool exprAssign();
 bool exprOr();
@@ -94,17 +94,10 @@ char inbuff[NMAX + 1];
 char* pch; // points to the current character
 
 Token* iterToken;
-Token* consumed; // last atom that's been consumed
+Token* consumedToken; // last atom that's been consumed
 
-void err(const char *fmt,...) {
-    va_list va;
-    va_start(va,fmt);
-    fprintf(stderr,"error: ");
-    vfprintf(stderr,fmt,va);
-    fputc('\n',stderr);
-    va_end(va);
-    exit(-1);
-}
+Symbol* owner;
+
 
 void tkerr(const Token *tk,const char *fmt,...) {
     va_list va;
@@ -494,7 +487,7 @@ void printToken() {
 
 bool consume(int code) {
     if (iterToken->code == code) {
-        consumed = iterToken;
+        consumedToken = iterToken;
         iterToken = iterToken->next;
         return true;
     }
@@ -519,10 +512,25 @@ bool structDef() {
     Token *start = iterToken;
     if (consume(STRUCT)) {
         if (consume(ID)) {
+            Token *name = consumedToken;
             if (consume(LACC)) {
+                {
+                    Symbol *s = findSymbolInDomain(symTable, name->text);
+                    if(s)tkerr(iterToken,"symbol redefinition: %s", name->text);
+                    s = addSymbolToDomain(symTable, newSymbol(name->text, SK_STRUCT));
+                    s->type.tb = TB_STRUCT;
+                    s->type.s = s;
+                    s->type.n = -1;
+                    pushDomain();
+                    owner = s;
+                }
                 while (varDef()) {}
                 if (consume(RACC)) {
                     if (consume(SEMICOLON)) {
+                        {
+                            owner=NULL;
+                            dropDomain();
+                        }
                         return true;
                     } else tkerr(iterToken, "Missing ; after struct definition");
                 } else tkerr(iterToken, "Missing } after the struct variables");
@@ -535,10 +543,41 @@ bool structDef() {
 
 bool varDef() {
     Token *start = iterToken;
-    if (typeBase()) {
+    Type t;
+    if (typeBase(&t)) {
         if (consume(ID)) {
-            if (arrayDecl()) {}
+            Token* name = consumedToken;
+            if (arrayDecl(&t)) {
+                if (t.n == 0)
+                    tkerr(iterToken, "a vector variable must have a specified dimension");
+            }
             if (consume(SEMICOLON)) {
+                {
+                    Symbol *var = findSymbolInDomain(symTable,name->text);
+                    if (var) tkerr(iterToken, "symbol redefinition: %s", name->text);
+                    var = newSymbol(name->text, SK_VAR);
+                    var->type = t;
+                    var->owner = owner;
+                    addSymbolToDomain(symTable, var);
+                    if (owner) {
+                        switch(owner->kind){
+                            case SK_FN:
+                                var->varIdx = symbolsLen(owner->fn.locals);
+                                addSymbolToList(&owner->fn.locals, dupSymbol(var));
+                                break;
+                            case SK_STRUCT:
+                                var->varIdx = typeSize(&owner->type);
+                                addSymbolToList(&owner->structMembers,dupSymbol(var));
+                                break;
+                            case SK_VAR:
+                                break;
+                            case SK_PARAM:
+                                break;
+                        }
+                    } else {
+                        var->varIdx = allocInGlobalMemory(typeSize(&t));
+                    }
+                }
                 return true;
             } else tkerr(iterToken, "Missing ; after variable name");
         } else tkerr(iterToken, "Missing variable name");
@@ -547,24 +586,43 @@ bool varDef() {
     return false;
 }
 
-bool typeBase() {
+bool typeBase(Type *t) {
+    t->n = -1;
     Token *start = iterToken;
-    if (consume(INT)) return true;
-    if (consume(DOUBLE)) return true;
-    if (consume(CHAR)) return true;
+    if (consume(INT)) {
+        t->tb = TB_INT;
+        return true;
+    }
+    if (consume(DOUBLE)) {
+        t->tb = TB_DOUBLE;
+        return true;
+    }
+    if (consume(CHAR)) {
+        t->tb = TB_CHAR;
+        return true;
+    }
     if (consume(STRUCT)) {
-        if (consume(ID)) 
+        if (consume(ID)) {
+            Token* name = consumedToken;
+            t->tb = TB_STRUCT;
+            t->s = findSymbol(name->text);
+            if (!t->s) tkerr(iterToken, "Undefined struct: %s", name->text);
             return true;
-        else tkerr(iterToken, "Missing struct name");
+        } else tkerr(iterToken, "Missing struct name");
     }
     iterToken = start;
     return false;
 }
 
-bool arrayDecl() {
+bool arrayDecl(Type *t) {
     Token *start = iterToken;
     if (consume(LBRACKET)) {
-        if (consume(CT_INT)) {}
+        if (consume(CT_INT)) {
+            Token *size = consumedToken;
+            t->n = size->i;
+        } else {
+            t->n=0; 
+        }
         if (consume(RBRACKET)) {
             return true;
         } else tkerr(iterToken, "Missing ] in array declaration");
@@ -575,12 +633,23 @@ bool arrayDecl() {
 
 bool fnDef() {
     Token *start = iterToken;
+    Type t;
     int id = -1;
-    if (typeBase()) { id = 100; }
-    if (consume(VOID)) { id = VOID; }
+    if (typeBase(&t)) { id = 100; }
+    if (consume(VOID)) { t.tb=TB_VOID, id = VOID; }
     if (id >= 0) {
         if (consume(ID)) {
+            Token* name = consumedToken;
             if (consume(LPAR)) {
+                {
+                    Symbol *fn = findSymbolInDomain(symTable, name->text);
+                    if (fn) tkerr(iterToken, "symbol redefinition: %s", name->text);
+                    fn = newSymbol(name->text, SK_FN);
+                    fn->type = t;
+                    addSymbolToDomain(symTable, fn);
+                    owner = fn;
+                    pushDomain();
+                }
                 if (fnParam()) {
                     while (consume(COMMA)) {
                         if (fnParam()) {}
@@ -588,7 +657,11 @@ bool fnDef() {
                     }
                 }
                 if (consume(RPAR)) {
-                    if (stmCompound()) {
+                    if (stmCompound(false)) {
+                        {
+                            dropDomain();
+                            owner=NULL;
+                        }
                         return true;
                     } else tkerr(iterToken, "Missing function body");
                 } else tkerr(iterToken, "Missing ) after function parameters");
@@ -601,9 +674,20 @@ bool fnDef() {
 
 bool fnParam() {
     Token *start = iterToken;
-    if (typeBase()) {
+    Type t;
+    if (typeBase(&t)) {
         if (consume(ID)) {
-            if (arrayDecl()) {}
+            Token* name = consumedToken;
+            if (arrayDecl(&t)) { t.n = 0; }
+            {
+                Symbol *param=findSymbolInDomain(symTable, name->text);
+                if (param) tkerr(iterToken,"symbol redefinition: %s", name->text);
+                param = newSymbol(name->text,SK_PARAM);
+                param->type = t;
+                param->paramIdx = symbolsLen(owner->fn.params);
+                addSymbolToDomain(symTable, param);
+                addSymbolToList(&owner->fn.params, dupSymbol(param));
+            }
             return true;
         } else tkerr(iterToken, "Missing parameter name");
     }
@@ -613,7 +697,7 @@ bool fnParam() {
 
 bool stm() {
     Token *start = iterToken;
-    if (stmCompound()) return true;
+    if (stmCompound(true)) return true;
     if (consume(IF)) {
         if (consume(LPAR)) {
             if (expr()) {
@@ -678,15 +762,17 @@ bool stm() {
     return false;
 }
 
-bool stmCompound() {
+bool stmCompound(bool newDomain) {
     Token *start = iterToken;
     if (consume(LACC)) {
+        if (newDomain) pushDomain();
         for (;;) {
             if (varDef()) {}
             else if (stm()) {}
             else break;
         }
         if (consume(RACC)) {
+            if (newDomain) dropDomain();
             return true;
         } else tkerr(iterToken, "Missing } after body");
     } 
@@ -870,9 +956,10 @@ bool exprMul() {
 
 bool exprCast() {
     Token *start = iterToken;
+    Type t;
     if (consume(LPAR)) {
-        if (typeBase()) {
-            if (arrayDecl()) {}
+        if (typeBase(&t)) {
+            if (arrayDecl(&t)) {}
             if (consume(RPAR)) {
                 if (exprCast()) {
                     return true;
@@ -1004,8 +1091,12 @@ int main(int argc, char** argv) {
      dropDomain();
 */
     while (getNextToken() != END);
+    printToken();
+    pushDomain();
     iterToken = tokens;
     if (unit()) printf("Program compiled succesfully.\n");
+    showDomain(symTable, "Global");
+    dropDomain();
 
     return 0;
 }
