@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <stdbool.h>
+#include "ad.h"
 
 #define NMAX 30000
 #define SAFEALLOC(var, Type) if((var = (Type*)malloc(sizeof(Type))) == NULL) err("notenough memory");
@@ -492,19 +493,15 @@ void printToken() {
 /* _________ SINTAX _________ */
 
 bool consume(int code) {
-    printf("consume(%s)", getTokenCode(code));
     if (iterToken->code == code) {
         consumed = iterToken;
         iterToken = iterToken->next;
-        printf("=> consumed\n");
         return true;
     }
-    printf(" => found %s\n",getTokenCode(iterToken->code));
     return false;
 }
 
 bool unit() {
-    printf("#unit() -> %s\n", getTokenCode(iterToken->code));
     for (;;) {
         if (structDef()) {}
         else if (fnDef()) {}
@@ -514,12 +511,11 @@ bool unit() {
     if (consume(END)) {
         return true;
     } else {
-        // error
+        tkerr(iterToken, "Missing End of File");
     }
 }
 
 bool structDef() {
-    printf("#structDef() -> %s\n", getTokenCode(iterToken->code));
     Token *start = iterToken;
     if (consume(STRUCT)) {
         if (consume(ID)) {
@@ -528,23 +524,23 @@ bool structDef() {
                 if (consume(RACC)) {
                     if (consume(SEMICOLON)) {
                         return true;
-                    } else tkerr(iterToken, "Missing ; after }");
-                } else tkerr(iterToken, "Missing } after {");
+                    } else tkerr(iterToken, "Missing ; after struct definition");
+                } else tkerr(iterToken, "Missing } after the struct variables");
             }
-        } else tkerr(iterToken, "Missing variable name after struct");
+        } else tkerr(iterToken, "Missing struct name");
     }
     iterToken = start;
     return false;
 }
 
 bool varDef() {
-    printf("#varDef() -> %s\n", getTokenCode(iterToken->code));
     Token *start = iterToken;
     if (typeBase()) {
         if (consume(ID)) {
             if (arrayDecl()) {}
-            if (consume(SEMICOLON))
+            if (consume(SEMICOLON)) {
                 return true;
+            } else tkerr(iterToken, "Missing ; after variable name");
         } else tkerr(iterToken, "Missing variable name");
     }
     iterToken = start;
@@ -552,69 +548,70 @@ bool varDef() {
 }
 
 bool typeBase() {
-    printf("#typeBase() -> %s\n", getTokenCode(iterToken->code));
     Token *start = iterToken;
     if (consume(INT)) return true;
     if (consume(DOUBLE)) return true;
     if (consume(CHAR)) return true;
-    if (consume(STRUCT)) 
+    if (consume(STRUCT)) {
         if (consume(ID)) 
             return true;
+        else tkerr(iterToken, "Missing struct name");
+    }
     iterToken = start;
     return false;
 }
 
 bool arrayDecl() {
-    printf("#arrayDecl() -> %s\n", getTokenCode(iterToken->code));
     Token *start = iterToken;
     if (consume(LBRACKET)) {
-        if (expr()) {}
+        if (consume(CT_INT)) {}
         if (consume(RBRACKET)) {
             return true;
-        }
+        } else tkerr(iterToken, "Missing ] in array declaration");
     }
     iterToken = start;
     return false;
 }
 
 bool fnDef() {
-    printf("#fnDef() -> %s\n", getTokenCode(iterToken->code));
     Token *start = iterToken;
-    if (typeBase()) {}
-    if (consume(VOID)) {}
-    if (consume(ID)) {
-        if (consume(LPAR)) {
-            if (fnParam()) {
-                while (consume(COMMA)) {
-                    if (fnParam()) {}
+    int id = -1;
+    if (typeBase()) { id = 100; }
+    if (consume(VOID)) { id = VOID; }
+    if (id >= 0) {
+        if (consume(ID)) {
+            if (consume(LPAR)) {
+                if (fnParam()) {
+                    while (consume(COMMA)) {
+                        if (fnParam()) {}
+                        else tkerr(iterToken, "Missing parameter after ,");
+                    }
                 }
-            }
-            if (consume(RPAR)) {
-                if (stmCompound()) {
-                    return true;
-                }
-            }
-        }
+                if (consume(RPAR)) {
+                    if (stmCompound()) {
+                        return true;
+                    } else tkerr(iterToken, "Missing function body");
+                } else tkerr(iterToken, "Missing ) after function parameters");
+            } 
+        } else tkerr(iterToken, "Missing function name");
     }
     iterToken = start;
     return false;
 }
 
 bool fnParam() {
-    printf("#fnParam() -> %s\n", getTokenCode(iterToken->code));
     Token *start = iterToken;
     if (typeBase()) {
         if (consume(ID)) {
             if (arrayDecl()) {}
             return true;
-        }
+        } else tkerr(iterToken, "Missing parameter name");
     }
     iterToken = start;
     return false;
 }
 
 bool stm() {
-    printf("#stm() -> %s\n", getTokenCode(iterToken->code));
     Token *start = iterToken;
     if (stmCompound()) return true;
     if (consume(IF)) {
@@ -624,12 +621,13 @@ bool stm() {
                     if (stm()) {
                         if (consume(ELSE)) {
                             if (stm()) {}
+                            else tkerr(iterToken, "Missing else branch body");
                         }
                         return true;
-                    }
-                }
-            }
-        }
+                    } else tkerr(iterToken, "Missing if branch body");
+                } else tkerr(iterToken, "Missing ) after if condition");
+            } else tkerr(iterToken, "Missing if statement condition");
+        } else tkerr(iterToken, "Missing ( after if");
     } 
     if (consume(WHILE)) {
         if (consume(LPAR)) {
@@ -637,10 +635,10 @@ bool stm() {
                 if (consume(RPAR)) {
                     if (stm()) {
                         return true;
-                    }
-                }
-            }
-        }
+                    } else tkerr(iterToken, "Missing while body");
+                } else tkerr(iterToken, "Missing ) after while condition");
+            } else tkerr(iterToken, "Missing while statement condition");
+        } else tkerr(iterToken, "Missing ( after while");
     } 
     if (consume(FOR)) {
         if (consume(LPAR)) {
@@ -652,33 +650,35 @@ bool stm() {
                         if (consume(RPAR)) {
                             if (stm()) {
                                 return true;
-                            }
-                        }
-                    }
-            }
-        }
+                            } else tkerr(iterToken, "Missing the for body");
+                        } else tkerr(iterToken, "Missing ) after the for condition");
+                    } else tkerr(iterToken, "Missing the second ; in the for statement");
+            } else tkerr(iterToken, "Missing the first ; in the for statement");
+        } else tkerr(iterToken, "Missing ( after for");
     } 
     if (consume(BREAK)) {
         if (consume(SEMICOLON)) {
             return true;
-        }
+        } else tkerr(iterToken, "Missing ; after break");
     } 
     if (consume(RETURN)) {
         if (expr()) {}
         if (consume(SEMICOLON)) {
             return true;
-        }
+        } else tkerr(iterToken, "Missing ; after return");
     }
-    if (expr()) {}
-    if (consume(SEMICOLON)) {
-        return true;
+    int ok = 0;
+    if (expr()) { ok = 1; }
+    if (ok) {
+        if (consume(SEMICOLON)) {
+            return true;
+        } else tkerr(iterToken, "Missing ; after expression");
     }
     iterToken = start;
     return false;
 }
 
 bool stmCompound() {
-    printf("#stmCompound() -> %s\n", getTokenCode(iterToken->code));
     Token *start = iterToken;
     if (consume(LACC)) {
         for (;;) {
@@ -688,14 +688,13 @@ bool stmCompound() {
         }
         if (consume(RACC)) {
             return true;
-        }
-    }
+        } else tkerr(iterToken, "Missing } after body");
+    } 
     iterToken = start;
     return false;
 }
 
 bool expr() {
-    printf("#expr() -> %s\n", getTokenCode(iterToken->code));
     if (exprAssign()) {
         return true;
     }
@@ -703,13 +702,12 @@ bool expr() {
 }
 
 bool exprAssign() {
-    printf("#exprAssign() -> %s\n", getTokenCode(iterToken->code));
     Token *start = iterToken;
     if (exprUnary()) {
         if (consume(ASSIGN)) {
             if (exprAssign()) {
                 return true;
-            }
+            } else tkerr(iterToken, "Invalid expression after =");
         }
     } 
     iterToken = start;
@@ -725,7 +723,7 @@ bool exprOrPrim() {
             if (exprOrPrim()) {
                 return true;
             }
-        }
+        } else tkerr(iterToken, "Invalid expression after ||");
     }
     iterToken = start;
     return true;
@@ -734,12 +732,11 @@ bool exprOrPrim() {
 // exprOr
 
 bool exprOr() {
-    printf("#exprOr() -> %s\n", getTokenCode(iterToken->code));
     if (exprAnd()) {
         if (exprOrPrim()) {
             return true;
         }
-    }
+    } 
     return false;
 }
 
@@ -750,14 +747,13 @@ bool exprAndPrim() {
             if (exprAndPrim()) {
                 return true;
             }
-        }
+        } else tkerr(iterToken, "Invalid expression after &&");
     }
     iterToken = start;
     return true;
 }
 
 bool exprAnd() {
-    printf("#exprAnd() -> %s\n", getTokenCode(iterToken->code));
     if (exprEq()) {
         if (exprAndPrim()) {
             return true;
@@ -775,14 +771,14 @@ bool exprEqPrim() {
     if (id >= 0) {
         if (exprRel()) {
             if (exprEqPrim()) return true;
-        }
+        } else if (id == EQUAL) tkerr(iterToken, "Invalid expression after ==");
+        else if (id == NOTEQ) tkerr(iterToken, "Invalid expression after !=");
     }
     iterToken = start;
     return true;
 }
 
 bool exprEq() {
-    printf("#exprEq() -> %s\n", getTokenCode(iterToken->code));
     if (exprRel()) {
         if (exprEqPrim()) {
             return true;
@@ -804,14 +800,16 @@ bool exprRelPrim() {
             if (exprRelPrim()) {
                 return true;
             }
-        }
+        } else if (id == LESS) tkerr(iterToken, "Invalid expression after <");
+        else if (id == LESSEQ) tkerr(iterToken, "Invalid expression after <=");
+        else if (id == GREATER) tkerr(iterToken, "Invalid expression after >");
+        else if (id == GREATEREQ) tkerr(iterToken, "Invalid expression after >=");
     }
     iterToken = start;
     return true;
 }
 
 bool exprRel() {
-    printf("#exprRel() -> %s\n", getTokenCode(iterToken->code));
     if (exprAdd()) {
         if (exprRelPrim()) {
             return true;
@@ -829,13 +827,13 @@ bool exprAddPrim() {
         if (exprAddPrim()) {
             return true;
         }
-    }
+    } else if (id == ADD) tkerr(iterToken, "Invalid expression after +");
+    else if (id == SUB) tkerr(iterToken, "Invalid expression after -");
     iterToken = start;
     return true;
 }
 
 bool exprAdd() {
-    printf("#exprAdd() -> %s\n", getTokenCode(iterToken->code));
     if (exprMul()) {
         if (exprAddPrim()) {
             return true;
@@ -854,14 +852,14 @@ bool exprMulPrim() {
             if (exprMulPrim()) {
                 return true;
             }
-        }
+        } else if (id == MUL) tkerr(iterToken, "Invalid expression after *");
+        else if (id == DIV) tkerr(iterToken, "Invalid expression after /");
     }
     iterToken = start;
     return true;
 }
 
 bool exprMul() {
-    printf("#exprMul() -> %s\n", getTokenCode(iterToken->code));
     if (exprCast()) {
         if (exprMulPrim()) {
             return true;
@@ -871,7 +869,6 @@ bool exprMul() {
 }
 
 bool exprCast() {
-    printf("#exprCast() -> %s\n", getTokenCode(iterToken->code));
     Token *start = iterToken;
     if (consume(LPAR)) {
         if (typeBase()) {
@@ -879,8 +876,8 @@ bool exprCast() {
             if (consume(RPAR)) {
                 if (exprCast()) {
                     return true;
-                }
-            }
+                } else tkerr(iterToken, "Invalid expression after ) in cast statement");
+            } else tkerr(iterToken, "Missing ) in cast statement");
         }
     } 
     iterToken = start;
@@ -890,21 +887,20 @@ bool exprCast() {
 }
 
 bool exprUnary() {
-    printf("#exprUnary() -> %s\n", getTokenCode(iterToken->code));
     Token *start = iterToken;
     int id = -1;
     if (consume(SUB)) {
         id = SUB;
     }
-    iterToken = start;
     if (consume(NOT)) {
         id = NOT;
     }
-    iterToken = start;
     
     if (id >= 0) {
-        if (exprUnary()) 
+        if (exprUnary()) {
             return true;
+        } else if (id == SUB) tkerr(iterToken, "Invalid or invalid expression after -");
+        else if (id == NOT) tkerr(iterToken, "Invalid expression after !");
     }
 
     if (exprPostfix()) {
@@ -921,23 +917,22 @@ bool exprPostfixPrim() {
             if (consume(RBRACKET)) {
                 if (exprPostfixPrim()) {
                     return true;
-                }
-            }
-        }
+                } else tkerr(iterToken, "Invalid expression after ]");
+            } else tkerr(iterToken, "Missing ] after exoression");
+        } else tkerr(iterToken, "Invalid expression after [");
     } 
     if (consume(DOT)) {
         if (consume(ID)) {
             if (exprPostfixPrim()) {
                 return true;
-            }
-        }
-    }
+            } else tkerr(iterToken, "Invalid expression after name");
+        } else tkerr(iterToken, "Invalid expression after .");
+    } 
     iterToken = start;
     return true;
 }
 
 bool exprPostfix() {
-    printf("#exprPostfix() -> %s\n", getTokenCode(iterToken->code));
     if (exprPrimary()) {
         if (exprPostfixPrim()) {
             return true;
@@ -947,7 +942,6 @@ bool exprPostfix() {
 }
 
 bool exprPrimary() {
-    printf("#exprPrimary() -> %s\n", getTokenCode(iterToken->code));
     Token *start = iterToken;
     if (consume(ID)) {
         if (consume(LPAR)) {
@@ -955,9 +949,12 @@ bool exprPrimary() {
                 for (;;) {
                     if (consume(COMMA)) {
                         if (expr()) {}
+                        else tkerr(iterToken, "Missing expression after ,");
                     } else break;
                 }
             }
+            if (consume(RPAR)) {}
+            else tkerr(iterToken, "Missing ) after expression");
         }
         return true;
     }
@@ -974,8 +971,8 @@ bool exprPrimary() {
         if (expr()) {
             if (consume(RPAR)) {
                 return true;
-            }
-        }
+            } else tkerr(iterToken, "Missing ) after expression");
+        } else tkerr(iterToken, "Missing expression after (");
     }
     iterToken = start;
     return false;
@@ -1000,13 +997,15 @@ int main(int argc, char** argv) {
 
     pch = inbuff;
 
+    /* show atoms
+     pushDomain();
+     unit()
+     showDomain(symTable, "Global")
+     dropDomain();
+*/
     while (getNextToken() != END);
-    printToken();
-
-    printf("%s\n", getTokenCode(tokens[0].code));
-
     iterToken = tokens;
-    unit();
+    if (unit()) printf("Program compiled succesfully.\n");
 
     return 0;
 }
