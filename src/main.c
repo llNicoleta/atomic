@@ -1005,7 +1005,7 @@ bool exprPostfixPrim() {
                 if (exprPostfixPrim()) {
                     return true;
                 } else tkerr(iterToken, "Invalid expression after ]");
-            } else tkerr(iterToken, "Missing ] after exoression");
+            } else tkerr(iterToken, "Missing ] after expression");
         } else tkerr(iterToken, "Invalid expression after [");
     } 
     if (consume(DOT)) {
@@ -1024,7 +1024,7 @@ bool exprPostfix() {
         if (exprPostfixPrim()) {
             return true;
         }
-    }
+    } 
     return false;
 }
 
