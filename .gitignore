@@ -53,4 +53,4 @@ dkms.conf
 
 # Misc
 .DS_Store
-src/*[^\.c]
+src/*[^\.ch]
