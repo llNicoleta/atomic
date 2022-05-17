@@ -1160,7 +1160,7 @@ bool exprPrimary(Ret *r) {
             if (consume(RPAR)) {
                 return true;
             } else tkerr(iterToken, "Missing ) after expression");
-        } else tkerr(iterToken, "Missing expression after (");
+        } 
     }
     iterToken = start;
     return false;
