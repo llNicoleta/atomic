@@ -1,4 +1,12 @@
 #pragma once
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <stdarg.h>
+
+#define SAFEALLOC(var, Type) if((var = (Type*)malloc(sizeof(Type))) == NULL) err("notenough memory");
+
 
 // analiza de domeniu
 
@@ -47,6 +55,8 @@ struct Symbol{
 		struct{
 			Symbol *params;		// parametrii functiei
 			Symbol *locals;		// variabilele locale, inclusiv cele din subdomeniile fn
+			void(*extFnPtr)();		// !=NULL pentru functii externe
+			int instrIdx;
 			}fn;
 		};
 	};
@@ -92,6 +102,14 @@ extern int nGlobalMemory;	// dimensiunea lui globalMemory, in octeti
 // aloca in globalMemory un spatiu de nBytes octeti
 // si ii returneaza indexul de inceput
 int allocInGlobalMemory(int nBytes);
+
+// adauga in TS o functie externa cu numele, adresa si tipul returnat date
+Symbol *addExtFn(const char *name,void(*extFnPtr)(),Type ret);
+
+// adauga la fn data un parametru cu numele si tipul specificate
+// nu face verificare de parametrii redefiniti
+// returneaza paramentrul adaugat
+Symbol *addFnParam(Symbol *fn,const char *name,Type type);
 
 void err(const char *fmt,...);
 

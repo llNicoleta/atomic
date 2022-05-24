@@ -5,7 +5,6 @@
 #include <stdarg.h>
 #include "ad.h"
 
-#define SAFEALLOC(var, Type) if((var = (Type*)malloc(sizeof(Type))) == NULL) err("notenough memory");
 
 Domain *symTable=NULL;
 char *globalMemory=NULL;
@@ -53,7 +52,7 @@ void freeSymbols(Symbol *list){
 
 Symbol *newSymbol(const char *name,SymKind kind){
 	Symbol *s;
-	SAFEALLOC(s,Symbol);
+	SAFEALLOC(s,Symbol)
 	// seteaza pe 0/NULL toate campurile
 	memset(s,0,sizeof(Symbol));
 	s->name=name;
@@ -96,10 +95,6 @@ void freeSymbol(Symbol *s){
 			break;
 		case SK_STRUCT:
 			freeSymbols(s->structMembers);
-			break;
-		case SK_VAR:
-			break;
-		case SK_PARAM:
 			break;
 		}
 	free(s);
@@ -205,4 +200,20 @@ int allocInGlobalMemory(int nBytes){
 	int idx=nGlobalMemory;
 	nGlobalMemory+=nBytes;
 	return idx;
+	}
+
+Symbol *addExtFn(const char *name,void(*extFnPtr)(),Type ret){
+	Symbol *fn=newSymbol(name,SK_FN);
+	fn->fn.extFnPtr=extFnPtr;
+	fn->type=ret;
+	addSymbolToDomain(symTable,fn);
+	return fn;
+	}
+
+Symbol *addFnParam(Symbol *fn,const char *name,Type type){
+	Symbol *param=newSymbol(name,SK_PARAM);
+	param->type=type;
+	param->paramIdx=symbolsLen(fn->fn.params);
+	addSymbolToList(&fn->fn.params,dupSymbol(param));
+	return param;
 	}

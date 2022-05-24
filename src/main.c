@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include "ad.h"
 #include "at.h"
+#include "mv.h"
 
 #define NMAX 30000
 #define SAFEALLOC(var, Type) if((var = (Type*)malloc(sizeof(Type))) == NULL) err("notenough memory");
@@ -1194,9 +1195,12 @@ int main(int argc, char** argv) {
     while (getNextToken() != END);
     printToken();
     pushDomain();
+    mvInit();
     iterToken = tokens;
     if (unit()) printf("Program compiled succesfully.\n");
     showDomain(symTable, "Global");
+    genTestProgram();
+    run();
     dropDomain();
 
     return 0;
