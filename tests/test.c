@@ -1,19 +1,23 @@
-struct S{
-	int n;
-	char text[16];
-	};
+// implementare recursiva pentru factorial
+int fact(int n){
+	if(n<3)return n;
+	return n*fact(n-1);
+	}
+
+void main(){
+	put_i(4.9);		// se afiseaza 4
 	
-struct S a;
-struct S v[10];
+	put_i(fact(3));	// se afiseaza 6
 
-void f(char text[],int i,char ch){
-	text[i]=ch;
-	}
-
-int h(int x,int y){
-	if(x>0&&x<y){
-		f(v[x].text,y,'#');
-		return 1;
+	// implementare nerecursiva pentru factorial
+	int r;
+	r=1;
+	int i;
+	i=2;
+	while(i<5){
+		r=r*i;
+		i=i+1;
 		}
-	return 0;
+	put_i(r);		// se afiseaza 24
 	}
+	
