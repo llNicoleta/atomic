@@ -13,6 +13,17 @@ int addInstr(int op){
 	return nInstructions++;
 	}
 
+int insertInstr(int pos,int op){
+	Instr *p=(Instr*)realloc(instructions,(nInstructions+1)*sizeof(Instr));
+	if(!p)err("not enough memory");
+	instructions=p;
+	Instr *i=instructions+pos;
+	memmove(i+1,i,(nInstructions-pos)*sizeof(Instr));
+	i->op=op;
+	nInstructions++;
+	return pos;
+	}
+
 int addInstrWithInt(int op,int i){
 	int pos=addInstr(op);
 	instructions[pos].arg.i=i;
@@ -28,23 +39,6 @@ int addInstrWithDouble(int op,double d){
 Val stack[10000];		// stiva
 Val *SP;		// Stack pointer - varful stivei - indica intotdeauna valoarea din varful stivei
 
-
-double popd(){
-	if(SP==stack-1)err("trying to pop from empty stack");
-	return SP--->f;
-	}
-
-
-void put_d(){
-	printf("=> %g",popd());
-	}
-
-void pushd(double d){
-	if(SP+1==stack+10000)err("trying to push into a full stack");
-	(++SP)->f=d;
-	}
-
-
 void pushv(Val v){
 	if(SP+1==stack+10000)err("trying to push into a full stack");
 	*++SP=v;
@@ -58,6 +52,16 @@ Val popv(){
 void pushi(int i){
 	if(SP+1==stack+10000)err("trying to push into a full stack");
 	(++SP)->i=i;
+	}
+
+double popf(){
+	if(SP==stack-1)err("trying to pop from empty stack");
+	return SP--->f;
+	}
+
+void pushf(double f){
+	if(SP+1==stack+10000)err("trying to push into a full stack");
+	(++SP)->f=f;
 	}
 
 int popi(){
@@ -82,8 +86,6 @@ void put_i(){
 void mvInit(){
 	Symbol *fn=addExtFn("put_i",put_i,(Type){TB_VOID,NULL,-1});
 	addFnParam(fn,"i",(Type){TB_INT,NULL,-1});
-	Symbol *fn_put_d=addExtFn("put_d",put_d,(Type){TB_VOID,NULL,-1});
-	addFnParam(fn_put_d,"d",(Type){TB_INT,NULL,-1});
 	}
 
 void run(){
@@ -92,7 +94,8 @@ void run(){
 	Instr *IP=instructions;		// Instruction pointer - pointer la instructiunea curenta
 	Val v;
 	int iArg,iTop,iBefore;
-	double dArg, dTop, dBefore;
+	double fTop;
+	void *pTop;
 	void(*extFnPtr)();
 	for(;;){
 		// afiseaza indexul instructiunii curente
@@ -105,11 +108,6 @@ void run(){
 			case OP_PUSH_I:
 				printf("PUSH.i\t%d",IP->arg.i);
 				pushi(IP->arg.i);
-				IP++;
-				break;
-			case OP_PUSH_D:
-				printf("PUSH.f\t%g",IP->arg.f);
-				pushd(IP->arg.f);
 				IP++;
 				break;
 			case OP_CALL:
@@ -165,13 +163,6 @@ void run(){
 				printf("ADD.i\t// %d+%d -> %d",iBefore,iTop,iBefore+iTop);
 				IP++;
 				break;
-			case OP_ADD_D:
-				dTop=popd();
-				dBefore=popd();
-				pushd(dBefore+dTop);
-				printf("ADD.f\t// %g+%g -> %g",dBefore,dTop,dBefore+dTop);
-				IP++;
-				break;
 			case OP_LESS_I:
 				iTop=popi();
 				iBefore=popi();
@@ -179,11 +170,64 @@ void run(){
 				printf("LESS.i\t// %d<%d -> %d",iBefore,iTop,iBefore<iTop);
 				IP++;
 				break;
-			case OP_LESS_D:
-				dTop=popd();
-				dBefore=popd();
-				pushi(dBefore<dTop);
-				printf("LESS.f\t// %f<%f -> %d",dBefore,dTop,dBefore<dTop);
+			// instructiuni adaugate pentru generarea de cod
+			case OP_RET:
+				v=popv();
+				iArg=IP->arg.i;
+				printf("RET\t%d\t// i:%d, f:%g",iArg,v.i,v.f);
+				IP=FP[-1].p;
+				SP=FP-iArg-2;
+				FP=FP[0].p;
+				pushv(v);
+				break;
+			case OP_PUSH_F:
+				printf("PUSH.f\t%g",IP->arg.f);
+				pushf(IP->arg.f);
+				IP++;
+				break;
+			case OP_CONV_F_I:
+				fTop=popf();
+				pushi((int)fTop);
+				printf("CONV.f.i\t// %g -> %d",fTop,(int)fTop);
+				IP++;
+				break;
+			case OP_LOAD_I:
+				pTop=popp();
+				pushi(*(int*)pTop);
+				printf("LOAD.i\t// *(int*)%p -> %d",pTop,*(int*)pTop);
+				IP++;
+				break;
+			case OP_STORE_I:
+				iTop=popi();
+				v=popv();
+				*(int*)v.p=iTop;
+				pushi(iTop);
+				printf("STORE.i\t//*(int*)%p=%d",v.p,iTop);
+				IP++;
+				break;
+			case OP_FPADDR_I:
+				pTop=&FP[IP->arg.i].i;
+				pushp(pTop);
+				printf("FPADDR\t%d\t// %p",IP->arg.i,pTop);
+				IP++;
+				break;
+			case OP_SUB_I:
+				iTop=popi();
+				iBefore=popi();
+				pushi(iBefore-iTop);
+				printf("SUB.i\t// %d-%d -> %d",iBefore,iTop,iBefore-iTop);
+				IP++;
+				break;
+			case OP_MUL_I:
+				iTop=popi();
+				iBefore=popi();
+				pushi(iBefore*iTop);
+				printf("MUL.i\t// %d*%d -> %d",iBefore,iTop,iBefore*iTop);
+				IP++;
+				break;
+			case OP_DROP:
+				popv();
+				printf("DROP");
 				IP++;
 				break;
 			default:err("run: instructiune neimplementata: %d",IP->op);
@@ -232,44 +276,3 @@ void f(int n){		// cadru: n[-2] ret[-1] oldFP[0] i[1]
 // 	instructions[jfAfterFor].arg.i=nInstructions;
 // 	addInstrWithInt(OP_RET_VOID,1);
 // 	}
-
-/*
-f(2.0);
-void f(double n){	// cadru: n[-2] ret[-1] oldFP[0] i[1]
-	double i;
-	for(i=0.0;i<n;i=i+0.5){
-		put_d(i);
-	}
-}
-*/
-// /*
-void genTestProgram() {
-	addInstrWithDouble(OP_PUSH_D,2.0);
-	int callPos=addInstr(OP_CALL);
-	addInstr(OP_HALT);
-	instructions[callPos].arg.i=nInstructions;
-	addInstrWithInt(OP_ENTER,1);
-
-	addInstrWithDouble(OP_PUSH_D,0.0);
-	addInstrWithInt(OP_FPSTORE,1);
-
-	int whilePos=addInstrWithInt(OP_FPLOAD,1);
-	addInstrWithInt(OP_FPLOAD,-2);
-	addInstr(OP_LESS_D);
-	int jfAfterFor=addInstr(OP_JF);
-	
-	addInstrWithInt(OP_FPLOAD,1);
-	Symbol *s=findSymbol("put_d");
-	if(!s)err("undefined: put_d");
-	int putdCall=addInstr(OP_CALL_EXT);
-	instructions[putdCall].arg.extFnPtr=s->fn.extFnPtr;
-	addInstrWithInt(OP_FPLOAD,1);
-	addInstrWithDouble(OP_PUSH_D,0.5);
-	addInstr(OP_ADD_D);
-	addInstrWithInt(OP_FPSTORE,1);
-	addInstrWithInt(OP_JMP,whilePos);
-	instructions[jfAfterFor].arg.i=nInstructions;
-	addInstrWithInt(OP_RET_VOID,1);
-}
-
-// */

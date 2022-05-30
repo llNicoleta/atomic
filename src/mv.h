@@ -16,7 +16,6 @@
 enum{
 	OP_HALT	// incheie executia codului 
 	,OP_PUSH_I		// [ct.i] depune pe stiva constanta ct.i
-	,OP_PUSH_D
 	,OP_CALL			// [idx] apeleaza o functie care se afla la indexul idx in vectorul de instructiuni
 	,OP_CALL_EXT	// [addr] apeleaza o functie din interiorul compilatorului, de la adresa addr
 	,OP_ENTER		// [nb_locals] creaza cadrul unei functii cu nb variabile locale
@@ -29,9 +28,27 @@ enum{
 	,OP_FPLOAD		// [idx] depune pe stiva valoarea de la FP[idx]
 	,OP_FPSTORE		// [idx] stocheaza la FP[idx] valoarea din varful stivei
 	,OP_ADD_I			// aduna 2 valori intregi din varful stivei si depune rezultatul in stiva
-	,OP_ADD_D
-	,OP_LESS_I		// compara 2 valori intregi din varful stivei si depune rezultatul in stiva ca int
-	,OP_LESS_D
+	,OP_LESS_I			// compara 2 valori intregi din varful stivei si depune rezultatul in stiva ca int
+
+	// instructiuni adaugate pentru generarea de cod
+	,OP_PUSH_F		// [ct.i] depune pe stiva constanta ct.i
+	,OP_CONV_F_I	// converteste valoarea de pe stiva de la double la int
+	,OP_LOAD_I		// preia o adresa din stiva si depune in locul ei valoarea intreaga de la aceasta adresa
+	,OP_LOAD_F		// preia o adresa din stiva si depune in locul ei valoarea reala de la aceasta adresa
+	,OP_STORE_I		// preia din stiva o adresa si o valoare intreaga si depune valoarea la adresa specificata. Lasa pe stiva valoarea.
+	,OP_STORE_F		// preia din stiva o adresa si o valoare reala si depune valoarea la adresa specificata. Lasa pe stiva valoarea.
+	,OP_ADDR			// [idx] depune pe stiva adresa lui globalMemory[idx]
+	,OP_FPADDR_I		// [idx] depune pe stiva adresa lui FP[idx].i
+	,OP_FPADDR_F		// [idx] depune pe stiva adresa lui FP[idx].f
+	,OP_ADD_F				// aduna 2 valori reale din varful stivei si depune rezultatul in stiva
+	,OP_SUB_I				// scade 2 valori intregi din varful stivei si depune rezultatul in stiva
+	,OP_SUB_F				// scade 2 valori reale din varful stivei si depune rezultatul in stiva
+	,OP_MUL_I				// inmulteste 2 valori intregi din varful stivei si depune rezultatul in stiva
+	,OP_MUL_F				// inmulteste 2 valori reale din varful stivei si depune rezultatul in stiva
+	,OP_DIV_I				// imparte 2 valori intregi din varful stivei si depune rezultatul in stiva
+	,OP_DIV_F				// imparte 2 valori reale din varful stivei si depune rezultatul in stiva
+	,OP_LESS_F			// compara 2 valori reale din varful stivei si depune rezultatul in stiva ca int
+	,OP_DROP				// sterge valoarea din varful stivei
 	};
 
 // o valoare de pe stiva sau argumentul unei instructiuni
@@ -58,6 +75,11 @@ extern int nInstructions;
 // Returneaza indexul instructiunii adaugate.
 int addInstr(int op);
 
+// insereaza la pozitia specificata o noua instructiune in vectorul de instructiuni
+// si ii seteaza campul "op".
+// Returneaza "pos".
+int insertInstr(int pos,int op);
+
 // adauga o instructiune care are un argument de tip int
 int addInstrWithInt(int op,int i);
 
@@ -72,4 +94,3 @@ void run();
 
 // genereaza un program de test
 void genTestProgram();
-
